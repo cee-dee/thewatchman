@@ -5,6 +5,7 @@ import sqlite3
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from .const import BUNDLED_IGNORED_ITEMS, CONF_ENFORCE_FILE_SIZE, CONF_IGNORED_ITEMS
 from .utils.logger import _LOGGER
@@ -55,12 +56,9 @@ class WatchmanHub:
         try:
             raw_items = self._parser.get_found_items(item_type='all')
         except sqlite3.OperationalError as e:
-            _LOGGER.warning(f"Database busy during read, returning cached/empty data: {e}")
-            # Try to return cached data if available, else empty
-            # Note: cached_items is now structured differently?
-            # For simplicity in this refactor, if DB fails, return empty structure.
-            # Ideally we should cache the full 'entities'/'services' structure.
-            return {"entities": {}, "services": {}}
+            # An empty result would read as "nothing missing". Sensor refresh
+            # keeps its last data on this error; the report action fails with it.
+            raise HomeAssistantError(f"Unable to read Watchman database: {e}") from e
 
         for item in raw_items:
             entity_id, path, line, item_type = item[0], item[1], item[2], item[3]
